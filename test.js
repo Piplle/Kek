@@ -200,5 +200,3 @@
   console.log('Event Logger настроен и работает!');
   
 })();
-
-
