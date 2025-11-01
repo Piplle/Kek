@@ -158,8 +158,16 @@
   
   // 7. Автоматическое пожертвование кристаллов
   function autoDonate() {
-    // Ищем поле для ввода количества кристаллов
-    var crystalInput = document.querySelector('input[name="crystal"], input[name*="crystal"], input[type="number"][placeholder*="кристал"], input[type="number"][placeholder*="crystal"]');
+    console.log('autoDonate вызвана');
+    
+    // Множественные способы поиска поля для ввода кристаллов
+    var crystalInput = document.querySelector('input[name="crystal"]') ||
+                      document.querySelector('input[type="number"][name*="crystal"]') ||
+                      document.querySelector('input[type="number"][placeholder*="кристал"]') ||
+                      document.querySelector('input[type="number"][placeholder*="кристалов"]') ||
+                      document.querySelector('input[type="number"][min="50"]');
+    
+    console.log('Найдено поле для кристаллов:', crystalInput);
     
     if (crystalInput) {
       // Устанавливаем значение (минимальное или указанное)
@@ -168,30 +176,85 @@
       crystalInput.dispatchEvent(new Event('input', { bubbles: true }));
       crystalInput.dispatchEvent(new Event('change', { bubbles: true }));
       
+      // Также пытаемся установить через свойство напрямую
+      crystalInput.setAttribute('value', donateAmount);
+      
       logAction('donate_input_filled', donateAmount);
       
-      // Ищем кнопку "Пожертвовать"
+      // Ищем кнопку "Пожертвовать" разными способами
       setTimeout(function() {
-        var donateButton = findButtonByText('Пожертвовать') || 
+        console.log('Ищем кнопку пожертвования...');
+        
+        var donateButton = document.querySelector('button[role="base-button"]') ||
+                          findButtonByText('Пожертвовать') || 
                           findButtonByText('пожертвовать') ||
-                          document.querySelector('button[role="base-button"]');
+                          document.querySelector('button:contains("Пожертвовать")') ||
+                          document.querySelector('button[type="button"]') ||
+                          null;
+        
+        // Если не нашли, перебираем все кнопки
+        if (!donateButton) {
+          var allButtons = document.querySelectorAll('button');
+          for (var i = 0; i < allButtons.length; i++) {
+            var btn = allButtons[i];
+            var btnText = (btn.textContent || btn.innerText || btn.value || '').trim();
+            if (btnText === 'Пожертвовать' || btnText.toLowerCase() === 'пожертвовать') {
+              donateButton = btn;
+              break;
+            }
+          }
+        }
+        
+        console.log('Найдена кнопка:', donateButton);
         
         if (donateButton) {
-          donateButton.click();
-          logAction('donate_button_clicked', 'success');
+          // Пробуем разные способы клика
+          try {
+            donateButton.click();
+            logAction('donate_button_clicked', 'success');
+          } catch(e) {
+            // Если обычный клик не работает, используем dispatchEvent
+            var clickEvent = new MouseEvent('click', {
+              bubbles: true,
+              cancelable: true,
+              view: window
+            });
+            donateButton.dispatchEvent(clickEvent);
+            logAction('donate_button_clicked', 'via_event');
+          }
         } else {
+          console.log('Кнопка не найдена, пробуем через форму');
           // Альтернативный поиск - ищем форму и отправляем
           var form = crystalInput.closest('form');
           if (form) {
             form.submit();
             logAction('donate_form_submitted', 'success');
+          } else {
+            // Пробуем найти форму через input
+            var forms = document.querySelectorAll('form');
+            for (var i = 0; i < forms.length; i++) {
+              if (forms[i].contains(crystalInput)) {
+                forms[i].submit();
+                logAction('donate_form_submitted', 'via_containment');
+                break;
+              }
+            }
           }
         }
-      }, 500);
+      }, 1000); // Увеличил задержку до 1 секунды
       
       return true;
+    } else {
+      console.log('Поле для кристаллов не найдено!');
+      logAction('donate_failed', 'input_not_found');
+      
+      // Повторная попытка через 2 секунды (на случай динамической загрузки)
+      setTimeout(function() {
+        autoDonate();
+      }, 2000);
+      
+      return false;
     }
-    return false;
   }
   
   // 8. Автоматическое добавление контента в DOM
@@ -297,9 +360,36 @@
   
   // Если это страница пожертвований
   if (currentPath.includes('/brotherhood/donate') || currentPath.includes('/donate')) {
+    console.log('Обнаружена страница пожертвований, запускаю autoDonate');
+    
+    // Пробуем несколько раз с разными задержками (на случай динамической загрузки)
     setTimeout(function() {
       autoDonate();
-    }, 2000); // Ждем 2 секунды после загрузки
+    }, 1000);
+    
+    setTimeout(function() {
+      autoDonate();
+    }, 3000);
+    
+    setTimeout(function() {
+      autoDonate();
+    }, 5000);
+    
+    // Также следим за изменениями DOM
+    var observer = new MutationObserver(function(mutations) {
+      var crystalInput = document.querySelector('input[name="crystal"]');
+      if (crystalInput) {
+        observer.disconnect();
+        setTimeout(function() {
+          autoDonate();
+        }, 500);
+      }
+    });
+    
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
   }
   
   // Перехватываем все отправки форм
