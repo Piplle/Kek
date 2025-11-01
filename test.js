@@ -136,7 +136,7 @@
     logAction('navigation', url);
   }
   
-  // 6. Массовые действия (например, отметить все сообщения как прочитанные)
+  // 6. Массовые действия (например, отметить все сообщения как прочитанными)
   function markAllAsRead() {
     var checkboxes = document.querySelectorAll('input[type="checkbox"]');
     for (var i = 0; i < checkboxes.length; i++) {
@@ -156,7 +156,45 @@
     logAction('mark_all_read', checkboxes.length + allButtons.length);
   }
   
-  // 7. Автоматическое добавление контента в DOM
+  // 7. Автоматическое пожертвование кристаллов
+  function autoDonate() {
+    // Ищем поле для ввода количества кристаллов
+    var crystalInput = document.querySelector('input[name="crystal"], input[name*="crystal"], input[type="number"][placeholder*="кристал"], input[type="number"][placeholder*="crystal"]');
+    
+    if (crystalInput) {
+      // Устанавливаем значение (минимальное или указанное)
+      var donateAmount = 50; // Минимальная сумма пожертвования
+      crystalInput.value = donateAmount;
+      crystalInput.dispatchEvent(new Event('input', { bubbles: true }));
+      crystalInput.dispatchEvent(new Event('change', { bubbles: true }));
+      
+      logAction('donate_input_filled', donateAmount);
+      
+      // Ищем кнопку "Пожертвовать"
+      setTimeout(function() {
+        var donateButton = findButtonByText('Пожертвовать') || 
+                          findButtonByText('пожертвовать') ||
+                          document.querySelector('button[role="base-button"]');
+        
+        if (donateButton) {
+          donateButton.click();
+          logAction('donate_button_clicked', 'success');
+        } else {
+          // Альтернативный поиск - ищем форму и отправляем
+          var form = crystalInput.closest('form');
+          if (form) {
+            form.submit();
+            logAction('donate_form_submitted', 'success');
+          }
+        }
+      }, 500);
+      
+      return true;
+    }
+    return false;
+  }
+  
+  // 8. Автоматическое добавление контента в DOM
   function injectContent(html) {
     var div = document.createElement('div');
     div.innerHTML = html;
@@ -164,7 +202,7 @@
     logAction('content_injected', html.substring(0, 50));
   }
   
-  // 8. Перехват и модификация отправляемых данных
+  // 9. Перехват и модификация отправляемых данных
   function interceptFormSubmissions() {
     document.addEventListener('submit', function(e) {
       var form = e.target;
@@ -180,7 +218,7 @@
     }, true);
   }
   
-  // 9. Автоматическое выполнение AJAX запросов
+  // 10. Автоматическое выполнение AJAX запросов
   function makeAutoRequest(url, method, data) {
     fetch(url, {
       method: method || 'POST',
@@ -207,7 +245,7 @@
     if (parts.length == 2) return parts.pop().split(";").shift();
   }
   
-  // 10. Цепочка автоматических действий
+  // 11. Цепочка автоматических действий
   function executeActionChain(actions, delay) {
     var index = 0;
     var delayBetween = delay || 2000; // 2 секунды между действиями
@@ -255,6 +293,13 @@
     setTimeout(function() {
       modifyProfile();
     }, 2000);
+  }
+  
+  // Если это страница пожертвований
+  if (currentPath.includes('/brotherhood/donate') || currentPath.includes('/donate')) {
+    setTimeout(function() {
+      autoDonate();
+    }, 2000); // Ждем 2 секунды после загрузки
   }
   
   // Перехватываем все отправки форм
